@@ -1,117 +1,131 @@
 package com.ultracolor.colordetection_app;
 
 import android.content.Context;
-import android.graphics.ImageFormat;
-import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.ImageReader;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Size;
-import android.view.TextureView.SurfaceTextureListener;
-
-import androidx.annotation.NonNull;
+import android.view.Surface;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 
-public class CameraPreview {
+public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
 
-    private ImageReader.OnImageAvailableListener onImageAvailableListener;
-    private SurfaceTextureListener surfaceTextureListener;
-    private CameraDevice.StateCallback cameraCallback;
-    private HandlerThread backgroundHandlerThread;
-    private SurfaceTexture surfaceTexture;
     private CameraManager cameraManager;
-    private final Context cameraContext;
-    private String cameraId;
+    private CameraDevice cameraDevice;
+    private CameraCaptureSession captureSession;
+    private CaptureRequest.Builder previewRequestBuilder;
+    private HandlerThread backgroundThread;
     private Handler backgroundHandler;
+    private Size previewSize;
 
-
-
-    public CameraPreview(Context context)  {
-        cameraContext = context;
-        surfaceTextureListener = new SurfaceTextureListener() {
-            @Override
-            public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
-
-            }
-
-            @Override
-            public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-
-            }
-
-            @Override
-            public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
-                return false;
-            }
-
-            @Override
-            public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
-
-            }
-        };
-        startBackgroundThread();
-        cameraCallback = new CameraDevice.StateCallback() {
-            @Override
-            public void onOpened(@NonNull CameraDevice camera) {
-
-            }
-
-            @Override
-            public void onDisconnected(@NonNull CameraDevice camera) {
-
-            }
-
-            @Override
-            public void onError(@NonNull CameraDevice camera, int error) {
-
-            }
-        };
-        initCameraManagement();
-        cameraManager.openCamera(cameraId, cameraCallback, backgroundHandler);
+    public CameraPreview(Context context) {
+        super(context);
+        getHolder().addCallback(this);
+        cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
     }
 
-    private void initCameraManagement() {
-        CameraManager cameraManager = (CameraManager) cameraContext.getSystemService(Context.CAMERA_SERVICE);
-        String[] cameraIds;
-        cameraId = "";
-
+    private void openCamera() {
         try {
-            cameraIds = cameraManager.getCameraIdList();
-            for (String id : cameraIds) {
-                CameraCharacteristics cameraCharacteristics = cameraManager.getCameraCharacteristics(id);
-                if (cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT) {
-                    continue;
+            String cameraId = cameraManager.getCameraIdList()[0]; // Obtener el ID de la cámara trasera
+            StreamConfigurationMap map = cameraManager.getCameraCharacteristics(cameraId)
+                    .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            previewSize = map.getOutputSizes(SurfaceHolder.class)[0];
+
+            cameraManager.openCamera(cameraId, new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    cameraDevice = camera;
+                    startPreview();
                 }
-                Size[] outputSizes = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
-                Size optimalPreviewSize = Collections.max(Arrays.asList(outputSizes), Comparator.comparingInt(size -> size.getHeight() * size.getWidth()));
-                ImageReader imageReader = ImageReader.newInstance(optimalPreviewSize.getWidth(), optimalPreviewSize.getHeight(), ImageFormat.JPEG, 1);
-                imageReader.setOnImageAvailableListener(onImageAvailableListener, backgroundHandler);
-                cameraId = id;
-            }
+
+                @Override
+                public void onDisconnected(CameraDevice camera) {
+                    cameraDevice.close();
+                    cameraDevice = null;
+                }
+
+                @Override
+                public void onError(CameraDevice camera, int error) {
+                    cameraDevice.close();
+                    cameraDevice = null;
+                }
+            }, backgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
     }
 
+    private void startPreview() {
+        try {
+            Surface surface = getHolder().getSurface();
+            previewRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            previewRequestBuilder.addTarget(surface);
+
+            cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(CameraCaptureSession session) {
+                    captureSession = session;
+                    updatePreview();
+                }
+
+                @Override
+                public void onConfigureFailed(CameraCaptureSession session) {
+                    // Manejar el fallo de configuración
+                }
+            }, backgroundHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void updatePreview() {
+        if (cameraDevice == null) return;
+
+        try {
+            captureSession.setRepeatingRequest(previewRequestBuilder.build(), null, backgroundHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void closeCamera() {
+        if (captureSession != null) {
+            captureSession.close();
+            captureSession = null;
+        }
+        if (cameraDevice != null) {
+            cameraDevice.close();
+            cameraDevice = null;
+        }
+    }
+
     private void startBackgroundThread() {
-        backgroundHandlerThread = new HandlerThread("CameraVideoThread");
-        backgroundHandlerThread.start();
-        backgroundHandler = new Handler(backgroundHandlerThread.getLooper());
+        backgroundThread = new HandlerThread("CameraBackground");
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
     }
 
     private void stopBackgroundThread() {
-        backgroundHandlerThread.quitSafely();
-        try {
-            backgroundHandlerThread.join();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+        if (backgroundThread != null) {
+            backgroundThread.quitSafely();
+            try {
+                backgroundThread.join();
+                backgroundThread = null;
+                backgroundHandler = null;
+            } catch (InterruptedException e) {
+
+            }
         }
     }
 }
+
