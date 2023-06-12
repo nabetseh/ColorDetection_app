@@ -34,6 +34,23 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
     }
 
+    @Override
+    public void surfaceCreated(SurfaceHolder holder) {
+        // La superficie está creada y lista para ser utilizada
+        openCamera();
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        // La configuración de la superficie ha cambiado
+    }
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
+        // La superficie está siendo destruida
+        closeCamera();
+    }
+
     private void openCamera() {
         try {
             String cameraId = cameraManager.getCameraIdList()[0]; // Obtener el ID de la cámara trasera
@@ -123,7 +140,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                 backgroundThread = null;
                 backgroundHandler = null;
             } catch (InterruptedException e) {
-
+                e.printStackTrace();
             }
         }
     }
