@@ -1,6 +1,9 @@
 package com.ultracolor.colordetection_app;
 
+import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -16,9 +19,14 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+
 import java.util.Arrays;
 
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
+
+    private static final int CAMERA_PERMISSION_REQUEST_CODE = 100;
 
     private CameraManager cameraManager;
     private CameraDevice cameraDevice;
@@ -52,6 +60,12 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     }
 
     private void openCamera() {
+
+        if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions((Activity) getContext(), new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST_CODE);
+            return;
+        }
+
         try {
             String cameraId = cameraManager.getCameraIdList()[0]; // Obtener el ID de la cámara trasera
             StreamConfigurationMap map = cameraManager.getCameraCharacteristics(cameraId)
@@ -60,23 +74,23 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
             cameraManager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
-                public void onOpened(CameraDevice camera) {
+                public void onOpened(@NonNull CameraDevice camera) {
                     cameraDevice = camera;
                     startPreview();
                 }
 
                 @Override
-                public void onDisconnected(CameraDevice camera) {
+                public void onDisconnected(@NonNull CameraDevice camera) {
                     cameraDevice.close();
                     cameraDevice = null;
                 }
 
                 @Override
-                public void onError(CameraDevice camera, int error) {
+                public void onError(@NonNull CameraDevice camera, int error) {
                     cameraDevice.close();
                     cameraDevice = null;
                 }
-            }, backgroundHandler);
+            }, null);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -145,4 +159,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         }
     }
 }
+
+
+
 
