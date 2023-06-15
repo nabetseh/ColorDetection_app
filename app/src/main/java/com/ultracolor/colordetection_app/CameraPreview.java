@@ -14,6 +14,7 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.ImageReader;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.util.AttributeSet;
 import android.util.Size;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -38,6 +39,12 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
     public CameraPreview(Context context) {
         super(context);
+        getHolder().addCallback(this);
+        cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+    }
+
+    public CameraPreview(Context context, AttributeSet attrs) {
+        super(context, attrs);
         getHolder().addCallback(this);
         cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
     }
@@ -67,7 +74,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         }
 
         try {
-            String cameraId = cameraManager.getCameraIdList()[0]; // Obtener el ID de la cámara trasera
+            String cameraId = cameraManager.getCameraIdList()[1]; // Obtener el ID de la cámara trasera
             StreamConfigurationMap map = cameraManager.getCameraCharacteristics(cameraId)
                     .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             previewSize = map.getOutputSizes(SurfaceHolder.class)[0];
